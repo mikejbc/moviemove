@@ -107,13 +107,103 @@ find_next_version() {
     done
 }
 
-# Function to process a single movie file
-process_movie() {
+# Function to use mnamer to rename and organize movie
+process_movie_with_mnamer() {
+    local source_file="$1"
+    local filename=$(basename "$source_file")
+    
+    log_message "Processing with mnamer: $filename"
+    
+    # Create temporary directory for mnamer processing
+    local temp_dir="$MNAMER_CACHE_DIR/temp/$(date +%s)"
+    mkdir -p "$temp_dir"
+    
+    # Copy file to temp directory for processing
+    if ! cp "$source_file" "$temp_dir/"; then
+        log_message "ERROR: Failed to copy $filename to temp directory"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    # Run mnamer on the file
+    local mnamer_output
+    if mnamer_output=$(mnamer --config="$MNAMER_CONFIG" --batch --no-overwrite "$temp_dir/$filename" 2>&1); then
+        log_message "mnamer processing successful for $filename"
+        log_message "mnamer output: $mnamer_output"
+        
+        # Find the renamed file
+        local renamed_file=$(find "$temp_dir" -name "*" -type f | grep -v "$filename" | head -1)
+        
+        if [[ -n "$renamed_file" ]] && [[ -f "$renamed_file" ]]; then
+            # mnamer successfully renamed the file
+            local new_filename=$(basename "$renamed_file")
+            log_message "File renamed by mnamer to: $new_filename"
+            
+            # Move to final destination with version handling
+            if move_to_final_destination "$renamed_file" "$source_file"; then
+                rm -rf "$temp_dir"
+                return 0
+            fi
+        else
+            # mnamer didn't rename, use fallback
+            log_message "mnamer didn't rename file, using fallback method"
+            rm -rf "$temp_dir"
+            return process_movie_fallback "$source_file"
+        fi
+    else
+        log_message "ERROR: mnamer failed for $filename: $mnamer_output"
+        rm -rf "$temp_dir"
+        return process_movie_fallback "$source_file"
+    fi
+    
+    rm -rf "$temp_dir"
+    return 1
+}
+
+# Function to move file to final destination with version handling
+move_to_final_destination() {
+    local renamed_file="$1"
+    local original_file="$2"
+    local filename=$(basename "$renamed_file")
+    local extension="${filename##*.}"
+    local basename_no_ext="${filename%.*}"
+    
+    # Create folder based on movie name
+    local folder_name="$basename_no_ext"
+    local destination_folder="$MOVIES_DESTINATION/$folder_name"
+    local destination_file="$destination_folder/$filename"
+    
+    # Create destination folder
+    mkdir -p "$destination_folder"
+    log_message "Created/verified folder: $folder_name"
+    
+    # Handle version conflicts
+    if [[ -f "$destination_file" ]]; then
+        log_message "File already exists, finding version number..."
+        local versioned_name=$(find_next_version "$destination_folder" "$basename_no_ext" "$extension")
+        destination_file="$destination_folder/$versioned_name"
+        log_message "Using versioned name: $versioned_name"
+    fi
+    
+    # Move the renamed file to final destination
+    if mv "$renamed_file" "$destination_file"; then
+        # Remove original file
+        rm -f "$original_file"
+        log_message "SUCCESS: Moved $filename to $folder_name/$(basename "$destination_file")"
+        return 0
+    else
+        log_message "ERROR: Failed to move $filename to final destination"
+        return 1
+    fi
+}
+
+# Fallback function using original logic
+process_movie_fallback() {
     local source_file="$1"
     local filename=$(basename "$source_file")
     local extension="${filename##*.}"
     
-    log_message "Processing: $filename"
+    log_message "Using fallback processing for: $filename"
     
     # Extract movie info
     local movie_info=$(extract_movie_info "$filename")
@@ -148,7 +238,7 @@ process_movie() {
     
     # Move the file
     if mv "$source_file" "$destination_file"; then
-        log_message "SUCCESS: Moved $filename to $folder_name/$versioned_name"
+        log_message "SUCCESS: Moved $filename to $folder_name/$(basename "$destination_file")"
         return 0
     else
         log_message "ERROR: Failed to move $filename"
@@ -175,7 +265,7 @@ scan_and_process() {
     # Find movie files and process them
     while IFS= read -r -d '' file; do
         if [[ -f "$file" ]]; then
-            if process_movie "$file"; then
+            if process_movie_with_mnamer "$file"; then
                 ((processed_count++))
             fi
         fi

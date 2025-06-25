@@ -1,0 +1,45 @@
+[Unit]
+Description=Movie Organizer Daemon
+Documentation=file:///usr/local/share/movie-organizer/README.md
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=movieorg
+Group=movieorg
+ExecStart=/usr/local/bin/movie_organizer.sh -w
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
+Restart=on-failure
+RestartSec=30
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log /var/cache/movie_organizer /mnt/smb-share
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictNamespaces=true
+
+# Resource limits
+LimitNOFILE=1024
+MemoryMax=256M
+CPUQuota=50%
+
+# Environment
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/var/lib/movie-organizer
+WorkingDirectory=/var/lib/movie-organizer
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=movie-organizer
+
+[Install]
+WantedBy=multi-user.target
