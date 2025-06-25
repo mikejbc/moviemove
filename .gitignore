@@ -35,3 +35,8 @@ cache/
 *.bak
 *.backup
 *.old
+
+# Test environment
+test_env/
+*.test
+test_*
