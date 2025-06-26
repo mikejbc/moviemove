@@ -125,9 +125,9 @@ process_movie_with_mnamer() {
         return 1
     fi
     
-    # Run mnamer on the file
+    # Run mnamer on the file (use --config-path for newer versions)
     local mnamer_output
-    if mnamer_output=$(mnamer --config="$MNAMER_CONFIG" --batch --no-overwrite "$temp_dir/$filename" 2>&1); then
+    if mnamer_output=$(mnamer --config-path="$MNAMER_CONFIG" --batch --no-overwrite "$temp_dir/$filename" 2>&1); then
         log_message "mnamer processing successful for $filename"
         log_message "mnamer output: $mnamer_output"
         
@@ -148,12 +148,14 @@ process_movie_with_mnamer() {
             # mnamer didn't rename, use fallback
             log_message "mnamer didn't rename file, using fallback method"
             rm -rf "$temp_dir"
-            return process_movie_fallback "$source_file"
+            process_movie_fallback "$source_file"
+            return $?
         fi
     else
         log_message "ERROR: mnamer failed for $filename: $mnamer_output"
         rm -rf "$temp_dir"
-        return process_movie_fallback "$source_file"
+        process_movie_fallback "$source_file"
+        return $?
     fi
     
     rm -rf "$temp_dir"
@@ -269,7 +271,7 @@ scan_and_process() {
                 ((processed_count++))
             fi
         fi
-    done < <(find "$SMB_DOWNLOAD_FOLDER" -type f -iregex ".*\.\($MOVIE_EXTENSIONS\)$" -print0)
+    done < <(find "$SMB_DOWNLOAD_FOLDER" -type f \( -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.avi" -o -iname "*.mov" -o -iname "*.wmv" -o -iname "*.flv" -o -iname "*.webm" -o -iname "*.m4v" -o -iname "*.mp2" -o -iname "*.mpg" -o -iname "*.mpeg" -o -iname "*.m2v" \) -print0)
     
     log_message "Processed $processed_count movies"
 }
